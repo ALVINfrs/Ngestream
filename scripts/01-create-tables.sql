@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS movies (
   trailer_url TEXT,
   overview TEXT,
   release_date DATE,
-  cast JSONB,
+  movie_cast JSONB,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

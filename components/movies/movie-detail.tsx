@@ -8,8 +8,21 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/use-auth";
 import { useSubscription } from "@/hooks/use-subscription";
 import { supabase } from "@/lib/supabase";
-import { getBackdropUrl, getImageUrl } from "@/lib/tmdb";
-import { Heart, Bookmark, Star, Calendar, Clock, Lock } from "lucide-react";
+import {
+  getBackdropUrl,
+  getImageUrl,
+  getContentRating,
+  getRatingColor,
+} from "@/lib/tmdb";
+import {
+  Heart,
+  Bookmark,
+  Star,
+  Calendar,
+  Clock,
+  Lock,
+  Users,
+} from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import ReactPlayer from "react-player/lazy";
 import CommentSection from "@/components/comments/comment-section";
@@ -30,6 +43,8 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
   const title = movie.title || movie.name;
   const releaseDate = movie.release_date || movie.first_air_date;
   const mediaType = movie.title ? "movie" : "tv";
+  const contentRating = getContentRating(movie, mediaType);
+  const ratingColor = getRatingColor(contentRating);
   const formattedDate = releaseDate
     ? new Date(releaseDate).toLocaleDateString("en-US", {
         year: "numeric",
@@ -245,6 +260,10 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
                     <span>{movie.runtime} min</span>
                   </div>
                 )}
+                <Badge className={`${ratingColor} text-white font-bold`}>
+                  <Users className="h-3 w-3 mr-1" />
+                  {contentRating}
+                </Badge>
               </div>
 
               <div className="flex flex-wrap gap-2 mb-4">
@@ -269,7 +288,7 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
                     isLiked
                       ? "bg-red-600 hover:bg-red-700"
                       : "bg-gray-800 hover:bg-gray-700"
-                  } flex items-center gap-2`}
+                  } flex items-center gap-2 transform hover:scale-105 transition-all`}
                 >
                   <Heart
                     className={`h-4 w-4 ${isLiked ? "fill-current" : ""}`}
@@ -287,7 +306,7 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
                     isWishlisted
                       ? "bg-blue-600 hover:bg-blue-700"
                       : "bg-gray-800 hover:bg-gray-700"
-                  } flex items-center gap-2`}
+                  } flex items-center gap-2 transform hover:scale-105 transition-all`}
                 >
                   <Bookmark
                     className={`h-4 w-4 ${isWishlisted ? "fill-current" : ""}`}
@@ -298,7 +317,7 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
                 {!canLike && (
                   <Button
                     variant="outline"
-                    className="border-yellow-600 text-yellow-500 hover:bg-yellow-900/20"
+                    className="border-yellow-600 text-yellow-500 hover:bg-yellow-900/20 transform hover:scale-105 transition-all"
                     onClick={() => {
                       /* Navigate to subscription page */
                     }}
@@ -368,7 +387,7 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
               {movie.credits?.cast?.slice(0, 12).map((person: any) => (
                 <div
                   key={person.id}
-                  className="bg-gray-900 rounded-lg overflow-hidden"
+                  className="bg-gray-900 rounded-lg overflow-hidden hover:scale-105 transition-transform"
                 >
                   <div className="aspect-[2/3] relative">
                     <Image

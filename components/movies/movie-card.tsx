@@ -5,8 +5,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
-import { getImageUrl } from "@/lib/tmdb";
+import { getImageUrl, getContentRating, getRatingColor } from "@/lib/tmdb";
 import { Heart, Bookmark, Play, Star, Info } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
@@ -25,6 +26,9 @@ interface MovieCardProps {
     vote_average?: number;
     genre_ids?: number[];
     media_type?: string;
+    adult?: boolean;
+    release_dates?: any;
+    content_ratings?: any;
   };
   showActions?: boolean;
 }
@@ -44,6 +48,8 @@ export default function MovieCard({
   const mediaType = movie.media_type || (movie.title ? "movie" : "tv");
   const voteAverage = movie.vote_average || 0;
   const overview = movie.overview || "No description available";
+  const contentRating = getContentRating(movie, mediaType as "movie" | "tv");
+  const ratingColor = getRatingColor(contentRating);
 
   useEffect(() => {
     if (user && showActions && movie.id) {
@@ -229,7 +235,7 @@ export default function MovieCard({
   };
 
   return (
-    <Card className="bg-gray-900 border-gray-700 overflow-hidden group hover:scale-105 transition-transform duration-300">
+    <Card className="bg-gray-900 border-gray-700 overflow-hidden group hover:scale-105 transition-all duration-300 hover:shadow-2xl hover:shadow-red-500/20">
       <div className="relative aspect-[2/3]">
         <Image
           src={
@@ -238,11 +244,14 @@ export default function MovieCard({
           }
           alt={title}
           fill
-          className="object-cover"
+          className="object-cover transition-transform duration-300 group-hover:scale-110"
         />
         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center gap-2">
           <Link href={`/${mediaType}/${movie.id}`}>
-            <Button size="sm" className="bg-red-600 hover:bg-red-700">
+            <Button
+              size="sm"
+              className="bg-red-600 hover:bg-red-700 transform hover:scale-105 transition-transform"
+            >
               <Play className="h-4 w-4 mr-2" />
               Watch
             </Button>
@@ -251,16 +260,27 @@ export default function MovieCard({
             <Button
               size="sm"
               variant="outline"
-              className="border-gray-400 bg-transparent text-white hover:bg-gray-800"
+              className="border-gray-400 bg-transparent text-white hover:bg-gray-800 transform hover:scale-105 transition-transform"
             >
               <Info className="h-4 w-4 mr-2" />
               More Info
             </Button>
           </Link>
         </div>
-        <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/70 px-2 py-1 rounded">
-          <Star className="h-3 w-3 text-yellow-400 fill-current" />
-          <span className="text-xs text-white">{voteAverage.toFixed(1)}</span>
+
+        {/* Rating and Age Rating Badges */}
+        <div className="absolute top-2 left-2 flex flex-col gap-1">
+          <div className="flex items-center gap-1 bg-black/70 px-2 py-1 rounded">
+            <Star className="h-3 w-3 text-yellow-400 fill-current" />
+            <span className="text-xs text-white font-medium">
+              {voteAverage.toFixed(1)}
+            </span>
+          </div>
+          <Badge
+            className={`${ratingColor} text-white text-xs px-2 py-1 font-bold`}
+          >
+            {contentRating}
+          </Badge>
         </div>
       </div>
 
@@ -284,7 +304,7 @@ export default function MovieCard({
                 disabled={loading}
                 className={`h-8 w-8 p-0 ${
                   isLiked ? "text-red-500" : "text-gray-400"
-                } hover:text-red-500`}
+                } hover:text-red-500 transition-colors`}
               >
                 <Heart className={`h-4 w-4 ${isLiked ? "fill-current" : ""}`} />
               </Button>
@@ -295,7 +315,7 @@ export default function MovieCard({
                 disabled={loading}
                 className={`h-8 w-8 p-0 ${
                   isWishlisted ? "text-blue-500" : "text-gray-400"
-                } hover:text-blue-500`}
+                } hover:text-blue-500 transition-colors`}
               >
                 <Bookmark
                   className={`h-4 w-4 ${isWishlisted ? "fill-current" : ""}`}

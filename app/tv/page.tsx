@@ -1,224 +1,210 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { tmdbApi, type TMDBMovie } from "@/lib/tmdb";
 import Navbar from "@/components/layout/navbar";
 import Footer from "@/components/layout/footer";
 import MovieGrid from "@/components/movies/movie-grid";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+const tabsConfig = [
+  {
+    value: "popular",
+    label: "Popular",
+    apiCall: (page: number) => tmdbApi.getPopular("tv", page),
+  },
+  {
+    value: "latest",
+    label: "🆕 Latest",
+    apiCall: (page: number) => tmdbApi.getLatest("tv", page),
+  },
+  {
+    value: "on_the_air",
+    label: "📺 On The Air",
+    apiCall: (page: number) => tmdbApi.getOnTheAir(page),
+  },
+  {
+    value: "top_rated",
+    label: "Top Rated",
+    apiCall: (page: number) => tmdbApi.getTopRated("tv", page),
+  },
+  {
+    value: "anime",
+    label: "🎌 Popular Anime",
+    apiCall: (page: number) => tmdbApi.getPopularAnime(page),
+  },
+  {
+    value: "top_anime",
+    label: "🎌 Top Anime",
+    apiCall: (page: number) => tmdbApi.getTopRatedAnime(page),
+  },
+  {
+    value: "latest_anime",
+    label: "🎌 Latest Anime",
+    apiCall: (page: number) => tmdbApi.getLatestAnime(page),
+  },
+  {
+    value: "airing_anime",
+    label: "🎌 Airing Anime",
+    apiCall: (page: number) => tmdbApi.getCurrentlyAiringAnime(page),
+  },
+  {
+    value: "kdrama",
+    label: "🇰🇷 Popular K-Drama",
+    apiCall: (page: number) => tmdbApi.getPopularKDrama(page),
+  },
+  {
+    value: "top_kdrama",
+    label: "🇰🇷 Top K-Drama",
+    apiCall: (page: number) => tmdbApi.getTopRatedKDrama(page),
+  },
+  {
+    value: "latest_kdrama",
+    label: "🇰🇷 Latest K-Drama",
+    apiCall: (page: number) => tmdbApi.getLatestKDrama(page),
+  },
+  {
+    value: "airing_kdrama",
+    label: "🇰🇷 Airing K-Drama",
+    apiCall: (page: number) => tmdbApi.getCurrentlyAiringKDrama(page),
+  },
+  {
+    value: "indonesian",
+    label: "🇮🇩 Indonesian",
+    apiCall: (page: number) => tmdbApi.getPopularIndonesian("tv", page),
+  },
+  {
+    value: "latest_indonesian",
+    label: "🇮🇩 Latest Indonesian",
+    apiCall: (page: number) => tmdbApi.getRecentIndonesian("tv", page),
+  },
+];
 
 export default function TVShowsPage() {
-  const [popularShows, setPopularShows] = useState<TMDBMovie[]>([]);
-  const [topRatedShows, setTopRatedShows] = useState<TMDBMovie[]>([]);
-  const [latestShows, setLatestShows] = useState<TMDBMovie[]>([]);
-  const [onTheAirShows, setOnTheAirShows] = useState<TMDBMovie[]>([]);
-  const [indonesianShows, setIndonesianShows] = useState<TMDBMovie[]>([]);
-  const [latestIndonesianShows, setLatestIndonesianShows] = useState<
-    TMDBMovie[]
-  >([]);
-  const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
   const [activeTab, setActiveTab] = useState("popular");
+  const [shows, setShows] = useState<TMDBMovie[]>([]);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [hasMore, setHasMore] = useState(true);
 
-  useEffect(() => {
-    fetchShows();
-  }, []);
+  // --- LOGIKA BARU UNTUK DRAG-TO-SCROLL ---
+  const tabsListRef = useRef<HTMLDivElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
 
-  const fetchShows = async () => {
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!tabsListRef.current) return;
+    setIsDragging(true);
+    // pageX adalah posisi mouse horizontal. offsetLeft adalah jarak elemen dari kiri.
+    setStartX(e.pageX - tabsListRef.current.offsetLeft);
+    setScrollLeft(tabsListRef.current.scrollLeft);
+  };
+
+  const handleMouseLeave = () => {
+    setIsDragging(false);
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDragging || !tabsListRef.current) return;
+    e.preventDefault(); // Mencegah aksi lain saat dragging (seperti seleksi teks)
+    const x = e.pageX - tabsListRef.current.offsetLeft;
+    const walk = (x - startX) * 2; // Angka 2 untuk membuat scroll lebih cepat/responsif
+    tabsListRef.current.scrollLeft = scrollLeft - walk;
+  };
+  // --- BATAS AKHIR LOGIKA BARU ---
+
+  const fetchShowsForTab = useCallback(async (tab: string, pageNum: number) => {
+    const config = tabsConfig.find((t) => t.value === tab);
+    if (!config) return;
     setLoading(true);
     try {
-      const [
-        popular,
-        topRated,
-        latest,
-        onTheAir,
-        indonesian,
-        latestIndonesian,
-      ] = await Promise.all([
-        tmdbApi.getPopular("tv"),
-        tmdbApi.getTopRated("tv"),
-        tmdbApi.getLatest("tv"),
-        tmdbApi.getOnTheAir(),
-        tmdbApi.getPopularIndonesian("tv"),
-        tmdbApi.getRecentIndonesian("tv"),
-      ]);
-
-      setPopularShows(popular.results || []);
-      setTopRatedShows(topRated.results || []);
-      setLatestShows(latest.results || []);
-      setOnTheAirShows(onTheAir.results || []);
-      setIndonesianShows(indonesian.results || []);
-      setLatestIndonesianShows(latestIndonesian.results || []);
+      const response = await config.apiCall(pageNum);
+      const newShows = response.results || [];
+      setShows((prevShows) =>
+        pageNum === 1 ? newShows : [...prevShows, ...newShows]
+      );
+      setHasMore(newShows.length > 0);
+      setPage(pageNum);
     } catch (error) {
-      console.error("Error fetching TV shows:", error);
+      console.error(`Error fetching shows for tab ${tab}:`, error);
+      setHasMore(false);
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    setShows([]);
+    setPage(1);
+    fetchShowsForTab(activeTab, 1);
+  }, [activeTab, fetchShowsForTab]);
+
+  const loadMoreShows = () => {
+    if (!loading) {
+      fetchShowsForTab(activeTab, page + 1);
+    }
   };
 
-  const loadMoreShows = async () => {
-    const nextPage = page + 1;
-    try {
-      let newShows: TMDBMovie[] = [];
-
-      switch (activeTab) {
-        case "popular":
-          const popular = await tmdbApi.getPopular("tv", nextPage);
-          newShows = popular.results || [];
-          setPopularShows((prev) => [...prev, ...newShows]);
-          break;
-        case "top_rated":
-          const topRated = await tmdbApi.getTopRated("tv", nextPage);
-          newShows = topRated.results || [];
-          setTopRatedShows((prev) => [...prev, ...newShows]);
-          break;
-        case "latest":
-          const latest = await tmdbApi.getLatest("tv", nextPage);
-          newShows = latest.results || [];
-          setLatestShows((prev) => [...prev, ...newShows]);
-          break;
-        case "on_the_air":
-          const onTheAir = await tmdbApi.getOnTheAir(nextPage);
-          newShows = onTheAir.results || [];
-          setOnTheAirShows((prev) => [...prev, ...newShows]);
-          break;
-        case "indonesian":
-          const indonesian = await tmdbApi.getPopularIndonesian("tv", nextPage);
-          newShows = indonesian.results || [];
-          setIndonesianShows((prev) => [...prev, ...newShows]);
-          break;
-        case "latest_indonesian":
-          const latestIndonesian = await tmdbApi.getRecentIndonesian(
-            "tv",
-            nextPage
-          );
-          newShows = latestIndonesian.results || [];
-          setLatestIndonesianShows((prev) => [...prev, ...newShows]);
-          break;
-      }
-
-      setPage(nextPage);
-    } catch (error) {
-      console.error("Error loading more TV shows:", error);
-    }
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
   };
 
   return (
     <div className="min-h-screen bg-black">
       <Navbar />
-
       <div className="max-w-7xl mx-auto px-4 py-8">
         <h1 className="text-3xl md:text-4xl font-bold text-white mb-8">
           TV Shows
         </h1>
-
         <Tabs
-          defaultValue="popular"
-          onValueChange={(value) => {
-            setActiveTab(value);
-            setPage(1);
-          }}
+          value={activeTab}
+          onValueChange={handleTabChange}
           className="mb-8"
         >
-          <TabsList className="bg-gray-900 border-b border-gray-800 w-full justify-start mb-6 flex-wrap">
-            <TabsTrigger
-              value="popular"
-              className="data-[state=active]:bg-red-600"
-            >
-              Popular
-            </TabsTrigger>
-            <TabsTrigger
-              value="latest"
-              className="data-[state=active]:bg-red-600"
-            >
-              🆕 Latest
-            </TabsTrigger>
-            <TabsTrigger
-              value="on_the_air"
-              className="data-[state=active]:bg-red-600"
-            >
-              📺 On The Air
-            </TabsTrigger>
-            <TabsTrigger
-              value="top_rated"
-              className="data-[state=active]:bg-red-600"
-            >
-              Top Rated
-            </TabsTrigger>
-            <TabsTrigger
-              value="indonesian"
-              className="data-[state=active]:bg-red-600"
-            >
-              Indonesian 🇮🇩
-            </TabsTrigger>
-            <TabsTrigger
-              value="latest_indonesian"
-              className="data-[state=active]:bg-red-600"
-            >
-              🇮🇩 Latest Indonesian
-            </TabsTrigger>
+          <TabsList
+            ref={tabsListRef}
+            onMouseDown={handleMouseDown}
+            onMouseLeave={handleMouseLeave}
+            onMouseUp={handleMouseUp}
+            onMouseMove={handleMouseMove}
+            className={`w-full justify-start relative overflow-x-auto bg-transparent p-0 space-x-3 h-auto 
+                        [scrollbar-width:none] [&::-webkit-scrollbar]:hidden 
+                        transition-cursor duration-300 ${
+                          isDragging ? "cursor-grabbing" : "cursor-grab"
+                        }`}
+          >
+            {tabsConfig.map((tab) => (
+              <TabsTrigger
+                key={tab.value}
+                value={tab.value}
+                className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 hover:bg-gray-800 rounded-full px-4 py-2 transition-colors duration-200"
+                // Mencegah tab ter-klik saat user selesai menggeser
+                onClick={(e) => {
+                  if (isDragging) {
+                    e.preventDefault();
+                  }
+                }}
+              >
+                {tab.label}
+              </TabsTrigger>
+            ))}
           </TabsList>
-
-          <TabsContent value="popular" className="mt-0">
+          <div className="mt-6">
             <MovieGrid
-              movies={popularShows}
+              movies={shows}
               loading={loading && page === 1}
-              hasMore={popularShows.length >= 20}
+              hasMore={hasMore}
               onLoadMore={loadMoreShows}
+              emptyMessage={`No shows found for this category. Try refreshing the page.`}
             />
-          </TabsContent>
-
-          <TabsContent value="latest" className="mt-0">
-            <MovieGrid
-              movies={latestShows}
-              loading={loading && page === 1}
-              hasMore={latestShows.length >= 20}
-              onLoadMore={loadMoreShows}
-              emptyMessage="No latest TV shows found. Try refreshing the page."
-            />
-          </TabsContent>
-
-          <TabsContent value="on_the_air" className="mt-0">
-            <MovieGrid
-              movies={onTheAirShows}
-              loading={loading && page === 1}
-              hasMore={onTheAirShows.length >= 20}
-              onLoadMore={loadMoreShows}
-              emptyMessage="No TV shows currently on the air."
-            />
-          </TabsContent>
-
-          <TabsContent value="top_rated" className="mt-0">
-            <MovieGrid
-              movies={topRatedShows}
-              loading={loading && page === 1}
-              hasMore={topRatedShows.length >= 20}
-              onLoadMore={loadMoreShows}
-            />
-          </TabsContent>
-
-          <TabsContent value="indonesian" className="mt-0">
-            <MovieGrid
-              movies={indonesianShows}
-              loading={loading && page === 1}
-              hasMore={indonesianShows.length >= 20}
-              onLoadMore={loadMoreShows}
-              emptyMessage="No Indonesian TV shows found. Try refreshing the page."
-            />
-          </TabsContent>
-
-          <TabsContent value="latest_indonesian" className="mt-0">
-            <MovieGrid
-              movies={latestIndonesianShows}
-              loading={loading && page === 1}
-              hasMore={latestIndonesianShows.length >= 20}
-              onLoadMore={loadMoreShows}
-              emptyMessage="No latest Indonesian TV shows found. Try refreshing the page."
-            />
-          </TabsContent>
+          </div>
         </Tabs>
       </div>
-
       <Footer />
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { tmdbApi, type TMDBMovie } from "@/lib/tmdb";
 import Navbar from "@/components/layout/navbar";
 import Footer from "@/components/layout/footer";
@@ -8,95 +8,145 @@ import MovieGrid from "@/components/movies/movie-grid";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Film, Tv } from "lucide-react";
 
-export default function IndonesianContentPage() {
-  const [indonesianMovies, setIndonesianMovies] = useState<TMDBMovie[]>([]);
-  const [indonesianTV, setIndonesianTV] = useState<TMDBMovie[]>([]);
-  const [topRatedIndonesianMovies, setTopRatedIndonesianMovies] = useState<
-    TMDBMovie[]
-  >([]);
-  const [latestIndonesianMovies, setLatestIndonesianMovies] = useState<
-    TMDBMovie[]
-  >([]);
-  const [latestIndonesianTV, setLatestIndonesianTV] = useState<TMDBMovie[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
-  const [activeTab, setActiveTab] = useState("movies");
-  const [activeMovieTab, setActiveMovieTab] = useState("popular");
-  const [activeTVTab, setActiveTVTab] = useState("popular");
+// --- CUSTOM HOOK UNTUK LOGIKA DRAG-TO-SCROLL ---
+// Hook ini bisa dipindahkan ke file sendiri agar bisa dipakai di halaman lain
+const useDragToScroll = () => {
+  const ref = useRef<HTMLDivElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
 
-  useEffect(() => {
-    fetchContent();
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!ref.current) return;
+    setIsDragging(true);
+    setStartX(e.pageX - ref.current.offsetLeft);
+    setScrollLeft(ref.current.scrollLeft);
   }, []);
 
-  const fetchContent = async () => {
-    setLoading(true);
-    try {
-      const [movies, tvShows, topRatedMovies, latestMovies, latestTV] =
-        await Promise.all([
-          tmdbApi.getPopularIndonesian("movie"),
-          tmdbApi.getPopularIndonesian("tv"),
-          tmdbApi.getTopRatedIndonesian("movie"),
-          tmdbApi.getRecentIndonesian("movie"),
-          tmdbApi.getRecentIndonesian("tv"),
-        ]);
+  const handleMouseLeave = useCallback(() => {
+    setIsDragging(false);
+  }, []);
 
-      setIndonesianMovies(movies.results || []);
-      setIndonesianTV(tvShows.results || []);
-      setTopRatedIndonesianMovies(topRatedMovies.results || []);
-      setLatestIndonesianMovies(latestMovies.results || []);
-      setLatestIndonesianTV(latestTV.results || []);
-    } catch (error) {
-      console.error("Error fetching Indonesian content:", error);
-    } finally {
-      setLoading(false);
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (!isDragging || !ref.current) return;
+      e.preventDefault();
+      const x = e.pageX - ref.current.offsetLeft;
+      const walk = (x - startX) * 2;
+      ref.current.scrollLeft = scrollLeft - walk;
+    },
+    [isDragging, startX, scrollLeft]
+  );
+
+  const props = {
+    ref,
+    onMouseDown: handleMouseDown,
+    onMouseLeave: handleMouseLeave,
+    onMouseUp: handleMouseUp,
+    onMouseMove: handleMouseMove,
+    className: `w-full justify-start relative overflow-x-auto bg-transparent p-0 space-x-3 h-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden transition-cursor duration-300 ${
+      isDragging ? "cursor-grabbing" : "cursor-grab"
+    }`,
+  };
+
+  return props;
+};
+
+// --- KONFIGURASI UNTUK SUB-TAB ---
+const movieTabsConfig = [
+  {
+    value: "popular",
+    label: "Popular",
+    apiCall: (page: number) => tmdbApi.getPopularIndonesian("movie", page),
+  },
+  {
+    value: "latest",
+    label: "🆕 Latest",
+    apiCall: (page: number) => tmdbApi.getRecentIndonesian("movie", page),
+  },
+  {
+    value: "top_rated",
+    label: "Top Rated",
+    apiCall: (page: number) => tmdbApi.getTopRatedIndonesian("movie", page),
+  },
+];
+
+const tvTabsConfig = [
+  {
+    value: "popular",
+    label: "Popular",
+    apiCall: (page: number) => tmdbApi.getPopularIndonesian("tv", page),
+  },
+  {
+    value: "latest",
+    label: "🆕 Latest",
+    apiCall: (page: number) => tmdbApi.getRecentIndonesian("tv", page),
+  },
+];
+
+export default function IndonesianContentPage() {
+  // --- STATE YANG SUDAH SANGAT EFISIEN ---
+  const [mainTab, setMainTab] = useState<"movies" | "tv">("movies");
+  const [subTab, setSubTab] = useState("popular");
+  const [content, setContent] = useState<TMDBMovie[]>([]);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [hasMore, setHasMore] = useState(true);
+
+  // Menggunakan custom hook untuk setiap TabsList
+  const movieTabsProps = useDragToScroll();
+  const tvTabsProps = useDragToScroll();
+
+  const fetchContentForTabs = useCallback(
+    async (currentMainTab: string, currentSubTab: string, pageNum: number) => {
+      const config =
+        currentMainTab === "movies" ? movieTabsConfig : tvTabsConfig;
+      const subTabConfig = config.find((t) => t.value === currentSubTab);
+      if (!subTabConfig) return;
+
+      setLoading(true);
+      try {
+        const response = await subTabConfig.apiCall(pageNum);
+        const newContent = response.results || [];
+        setContent((prev) =>
+          pageNum === 1 ? newContent : [...prev, ...newContent]
+        );
+        setHasMore(newContent.length > 0);
+        setPage(pageNum);
+      } catch (error) {
+        console.error("Error fetching content:", error);
+        setHasMore(false);
+      } finally {
+        setLoading(false);
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    setContent([]);
+    setPage(1);
+    fetchContentForTabs(mainTab, subTab, 1);
+  }, [mainTab, subTab, fetchContentForTabs]);
+
+  const loadMoreContent = () => {
+    if (!loading) {
+      fetchContentForTabs(mainTab, subTab, page + 1);
     }
   };
 
-  const loadMoreContent = async () => {
-    const nextPage = page + 1;
-    try {
-      if (activeTab === "movies") {
-        if (activeMovieTab === "popular") {
-          const { results } = await tmdbApi.getPopularIndonesian(
-            "movie",
-            nextPage
-          );
-          setIndonesianMovies((prev) => [...prev, ...(results || [])]);
-        } else if (activeMovieTab === "top_rated") {
-          const { results } = await tmdbApi.getTopRatedIndonesian(
-            "movie",
-            nextPage
-          );
-          setTopRatedIndonesianMovies((prev) => [...prev, ...(results || [])]);
-        } else {
-          const { results } = await tmdbApi.getRecentIndonesian(
-            "movie",
-            nextPage
-          );
-          setLatestIndonesianMovies((prev) => [...prev, ...(results || [])]);
-        }
-      } else {
-        if (activeTVTab === "popular") {
-          const { results } = await tmdbApi.getPopularIndonesian(
-            "tv",
-            nextPage
-          );
-          setIndonesianTV((prev) => [...prev, ...(results || [])]);
-        } else {
-          const { results } = await tmdbApi.getRecentIndonesian("tv", nextPage);
-          setLatestIndonesianTV((prev) => [...prev, ...(results || [])]);
-        }
-      }
-      setPage(nextPage);
-    } catch (error) {
-      console.error("Error loading more content:", error);
-    }
+  const handleMainTabChange = (value: "movies" | "tv") => {
+    setMainTab(value);
+    setSubTab("popular"); // Reset sub-tab ke 'popular' saat ganti tab utama
   };
 
   return (
     <div className="min-h-screen bg-black">
       <Navbar />
-
       <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="flex items-center mb-8">
           <h1 className="text-3xl md:text-4xl font-bold text-white">
@@ -106,11 +156,10 @@ export default function IndonesianContentPage() {
         </div>
 
         <Tabs
-          defaultValue="movies"
-          onValueChange={(value) => {
-            setActiveTab(value);
-            setPage(1);
-          }}
+          value={mainTab}
+          onValueChange={(value) =>
+            handleMainTabChange(value as "movies" | "tv")
+          }
           className="mb-8"
         >
           <TabsList className="bg-gray-900 border-b border-gray-800 w-full justify-start mb-6">
@@ -128,115 +177,49 @@ export default function IndonesianContentPage() {
           </TabsList>
 
           <TabsContent value="movies" className="mt-0">
-            <Tabs
-              defaultValue="popular"
-              onValueChange={(value) => {
-                setActiveMovieTab(value);
-                setPage(1);
-              }}
-              className="mb-8"
-            >
-              <TabsList className="bg-gray-900 border-b border-gray-800 w-full justify-start mb-6">
-                <TabsTrigger
-                  value="popular"
-                  className="data-[state=active]:bg-red-600"
-                >
-                  Popular
-                </TabsTrigger>
-                <TabsTrigger
-                  value="latest"
-                  className="data-[state=active]:bg-red-600"
-                >
-                  🆕 Latest
-                </TabsTrigger>
-                <TabsTrigger
-                  value="top_rated"
-                  className="data-[state=active]:bg-red-600"
-                >
-                  Top Rated
-                </TabsTrigger>
+            <Tabs value={subTab} onValueChange={setSubTab}>
+              <TabsList {...movieTabsProps}>
+                {movieTabsConfig.map((tab) => (
+                  <TabsTrigger
+                    key={tab.value}
+                    value={tab.value}
+                    className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 hover:bg-gray-800 rounded-full px-4 py-2 transition-colors duration-200"
+                  >
+                    {tab.label}
+                  </TabsTrigger>
+                ))}
               </TabsList>
-
-              <TabsContent value="popular" className="mt-0">
-                <MovieGrid
-                  movies={indonesianMovies}
-                  loading={loading && page === 1}
-                  hasMore={indonesianMovies.length >= 20}
-                  onLoadMore={loadMoreContent}
-                  emptyMessage="No Indonesian movies found. Try refreshing the page."
-                />
-              </TabsContent>
-
-              <TabsContent value="latest" className="mt-0">
-                <MovieGrid
-                  movies={latestIndonesianMovies}
-                  loading={loading && page === 1}
-                  hasMore={latestIndonesianMovies.length >= 20}
-                  onLoadMore={loadMoreContent}
-                  emptyMessage="No latest Indonesian movies found. Try refreshing the page."
-                />
-              </TabsContent>
-
-              <TabsContent value="top_rated" className="mt-0">
-                <MovieGrid
-                  movies={topRatedIndonesianMovies}
-                  loading={loading && page === 1}
-                  hasMore={topRatedIndonesianMovies.length >= 20}
-                  onLoadMore={loadMoreContent}
-                  emptyMessage="No top rated Indonesian movies found. Try refreshing the page."
-                />
-              </TabsContent>
             </Tabs>
           </TabsContent>
 
           <TabsContent value="tv" className="mt-0">
-            <Tabs
-              defaultValue="popular"
-              onValueChange={(value) => {
-                setActiveTVTab(value);
-                setPage(1);
-              }}
-              className="mb-8"
-            >
-              <TabsList className="bg-gray-900 border-b border-gray-800 w-full justify-start mb-6">
-                <TabsTrigger
-                  value="popular"
-                  className="data-[state=active]:bg-red-600"
-                >
-                  Popular
-                </TabsTrigger>
-                <TabsTrigger
-                  value="latest"
-                  className="data-[state=active]:bg-red-600"
-                >
-                  🆕 Latest
-                </TabsTrigger>
+            <Tabs value={subTab} onValueChange={setSubTab}>
+              <TabsList {...tvTabsProps}>
+                {tvTabsConfig.map((tab) => (
+                  <TabsTrigger
+                    key={tab.value}
+                    value={tab.value}
+                    className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-gray-300 hover:bg-gray-800 rounded-full px-4 py-2 transition-colors duration-200"
+                  >
+                    {tab.label}
+                  </TabsTrigger>
+                ))}
               </TabsList>
-
-              <TabsContent value="popular" className="mt-0">
-                <MovieGrid
-                  movies={indonesianTV}
-                  loading={loading && page === 1}
-                  hasMore={indonesianTV.length >= 20}
-                  onLoadMore={loadMoreContent}
-                  emptyMessage="No Indonesian TV shows found. Try refreshing the page."
-                />
-              </TabsContent>
-
-              <TabsContent value="latest" className="mt-0">
-                <MovieGrid
-                  movies={latestIndonesianTV}
-                  loading={loading && page === 1}
-                  hasMore={latestIndonesianTV.length >= 20}
-                  onLoadMore={loadMoreContent}
-                  emptyMessage="No latest Indonesian TV shows found. Try refreshing the page."
-                />
-              </TabsContent>
             </Tabs>
           </TabsContent>
         </Tabs>
-      </div>
 
+        {/* CUKUP SATU MOVIE GRID UNTUK SEMUA KONTEN */}
+        <div className="mt-6">
+          <MovieGrid
+            movies={content}
+            loading={loading && page === 1}
+            hasMore={hasMore}
+            onLoadMore={loadMoreContent}
+            emptyMessage={`No content found for this category.`}
+          />
+        </div>
+      </div>
       <Footer />
     </div>
   );
