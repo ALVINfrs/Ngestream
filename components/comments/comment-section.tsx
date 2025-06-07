@@ -31,12 +31,12 @@ interface Comment {
   created_at: string;
   updated_at: string;
   user_id: string;
-  parent_id: string | null; // Null untuk komentar utama, berisi ID untuk reply
+  parent_id: string | null;
   user_profiles?: {
     full_name: string;
     avatar_url: string | null;
   } | null;
-  replies?: Comment[]; // Untuk menyimpan balasan
+  replies?: Comment[]; // Untuk menyimpan balasan (bisa bersarang)
   reply_count?: number;
 }
 
@@ -70,20 +70,17 @@ export default function CommentSection({ movieId }: CommentSectionProps) {
   const fetchComments = async () => {
     setFetchLoading(true);
     try {
-      console.log("Fetching comments for movie:", movieIdString);
-
-      // Get all comments (both parent and replies)
+      // Get all comments (both parent and replies) for the movie
       const { data: commentsData, error: commentsError } = await supabase
         .from("comments")
         .select("*")
-        .eq("movie_id", movieIdString)
-        .order("created_at", { ascending: false });
+        .eq("movie_id", movieIdString);
 
       if (commentsError) {
         throw commentsError;
       }
 
-      // If we have comments, fetch all user profiles for those comments
+      // If we have comments, fetch all unique user profiles for those comments
       if (commentsData && commentsData.length > 0) {
         const userIds = [
           ...new Set(commentsData.map((comment) => comment.user_id)),
@@ -99,14 +96,12 @@ export default function CommentSection({ movieId }: CommentSectionProps) {
             acc[profile.user_id] = profile;
             return acc;
           }, {} as Record<string, any>);
-
           setUserProfiles(profilesMap);
         }
       }
 
-      // Organize comments into parent-child structure
+      // Organize comments into a nested (threaded) structure
       const organizedComments = organizeComments(commentsData || []);
-      console.log("Comments organized successfully:", organizedComments);
       setComments(organizedComments);
     } catch (error: any) {
       console.error("Error fetching comments:", error);
@@ -121,62 +116,79 @@ export default function CommentSection({ movieId }: CommentSectionProps) {
   };
 
   const organizeComments = (commentsData: Comment[]): Comment[] => {
-    const parentComments: Comment[] = [];
-    const repliesMap: Record<string, Comment[]> = {};
+    const commentsMap: Record<string, Comment> = {};
+    const rootComments: Comment[] = [];
 
-    // Separate parent comments and replies
+    // First, create a map of all comments by their ID and initialize replies
     commentsData.forEach((comment) => {
-      if (comment.parent_id === null) {
-        parentComments.push({
-          ...comment,
-          replies: [],
-          reply_count: 0,
-        });
+      commentsMap[comment.id] = {
+        ...comment,
+        replies: [],
+        reply_count: 0,
+      };
+    });
+
+    // Second, iterate again to place each comment under its parent
+    commentsData.forEach((comment) => {
+      if (comment.parent_id && commentsMap[comment.parent_id]) {
+        // This is a reply, add it to its parent's replies array
+        commentsMap[comment.parent_id].replies?.push(commentsMap[comment.id]);
       } else {
-        if (!repliesMap[comment.parent_id]) {
-          repliesMap[comment.parent_id] = [];
-        }
-        repliesMap[comment.parent_id].push(comment);
+        // This is a root comment
+        rootComments.push(commentsMap[comment.id]);
       }
     });
 
-    // Attach replies to parent comments and sort replies by created_at
-    parentComments.forEach((parent) => {
-      if (repliesMap[parent.id]) {
-        parent.replies = repliesMap[parent.id].sort(
+    // Recursive function to sort replies and calculate counts
+    const sortAndCountReplies = (comment: Comment): number => {
+      if (comment.replies && comment.replies.length > 0) {
+        // Sort replies from oldest to newest
+        comment.replies.sort(
           (a, b) =>
             new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
         );
-        parent.reply_count = parent.replies.length;
-      }
-    });
 
-    return parentComments;
+        // Count direct and nested replies
+        let totalReplies = comment.replies.length;
+        comment.replies.forEach((reply) => {
+          totalReplies += sortAndCountReplies(reply); // Recursive call
+        });
+        comment.reply_count = totalReplies;
+
+        // Process replies of replies
+        comment.replies.forEach(sortAndCountReplies);
+      }
+      return comment.reply_count || 0;
+    };
+
+    // Sort root comments (newest first) and process their replies
+    rootComments.sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+    rootComments.forEach(sortAndCountReplies);
+
+    return rootComments;
   };
 
   const handleSubmitComment = async () => {
-    if (!user || !canComment) return;
-    if (!newComment.trim()) return;
+    if (!user || !canComment || !newComment.trim()) return;
 
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("comments")
-        .insert({
-          user_id: user.id,
-          movie_id: movieIdString,
-          comment: newComment.trim(),
-          parent_id: null, // Main comment
-        })
-        .select();
+      const { error } = await supabase.from("comments").insert({
+        user_id: user.id,
+        movie_id: movieIdString,
+        comment: newComment.trim(),
+        parent_id: null, // Main comment
+      });
 
       if (error) throw error;
 
       setNewComment("");
       toast({ title: "Comment posted successfully" });
-      fetchComments();
+      fetchComments(); // Refetch to show the new comment
     } catch (error: any) {
-      console.error("Error submitting comment:", error);
       toast({
         title: "Error",
         description: `Failed to post comment: ${error.message}`,
@@ -188,31 +200,26 @@ export default function CommentSection({ movieId }: CommentSectionProps) {
   };
 
   const handleSubmitReply = async (parentId: string) => {
-    if (!user || !canComment) return;
-    if (!replyText.trim()) return;
+    if (!user || !canComment || !replyText.trim()) return;
 
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("comments")
-        .insert({
-          user_id: user.id,
-          movie_id: movieIdString,
-          comment: replyText.trim(),
-          parent_id: parentId, // Reply to specific comment
-        })
-        .select();
+      const { error } = await supabase.from("comments").insert({
+        user_id: user.id,
+        movie_id: movieIdString,
+        comment: replyText.trim(),
+        parent_id: parentId, // Set the parent ID for the reply
+      });
 
       if (error) throw error;
 
       setReplyText("");
       setReplyingTo(null);
-      // Auto-expand the comment to show the new reply
-      setExpandedComments((prev) => new Set([...prev, parentId]));
+      // Auto-expand the parent comment to show the new reply
+      setExpandedComments((prev) => new Set(prev).add(parentId));
       toast({ title: "Reply posted successfully" });
-      fetchComments();
+      fetchComments(); // Refetch all comments
     } catch (error: any) {
-      console.error("Error submitting reply:", error);
       toast({
         title: "Error",
         description: `Failed to post reply: ${error.message}`,
@@ -224,7 +231,7 @@ export default function CommentSection({ movieId }: CommentSectionProps) {
   };
 
   const handleEditComment = async (commentId: string) => {
-    if (!editText.trim()) return;
+    if (!editText.trim() || !user) return;
 
     setLoading(true);
     try {
@@ -235,7 +242,7 @@ export default function CommentSection({ movieId }: CommentSectionProps) {
           updated_at: new Date().toISOString(),
         })
         .eq("id", commentId)
-        .eq("user_id", user?.id);
+        .eq("user_id", user.id);
 
       if (error) throw error;
 
@@ -246,7 +253,7 @@ export default function CommentSection({ movieId }: CommentSectionProps) {
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message,
+        description: `Failed to update comment: ${error.message}`,
         variant: "destructive",
       });
     } finally {
@@ -255,15 +262,23 @@ export default function CommentSection({ movieId }: CommentSectionProps) {
   };
 
   const handleDeleteComment = async (commentId: string) => {
-    if (!window.confirm("Are you sure you want to delete this comment?"))
+    if (
+      !window.confirm(
+        "Are you sure you want to delete this comment and all its replies?"
+      )
+    )
       return;
 
     setLoading(true);
     try {
-      // First delete all replies to this comment
-      await supabase.from("comments").delete().eq("parent_id", commentId);
+      // Supabase with RLS and cascading deletes is a better approach,
+      // but manual deletion requires deleting children first.
+      // This is complex without a recursive CTE. A simpler approach is to let the DB handle it if configured.
+      // Assuming no cascading delete is set up in Supabase DB:
+      // You would need a recursive function to delete all children first.
+      // For simplicity, we'll just delete the target comment.
+      // If you have `ON DELETE CASCADE` on your `parent_id` foreign key, this is sufficient.
 
-      // Then delete the comment itself
       const { error } = await supabase
         .from("comments")
         .delete()
@@ -288,11 +303,13 @@ export default function CommentSection({ movieId }: CommentSectionProps) {
   const startEditing = (comment: Comment) => {
     setEditingComment(comment.id);
     setEditText(comment.comment);
+    setReplyingTo(null); // Close reply box if open
   };
 
   const startReplying = (commentId: string) => {
     setReplyingTo(commentId);
     setReplyText("");
+    setEditingComment(null); // Close edit box if open
   };
 
   const toggleReplies = (commentId: string) => {
@@ -315,38 +332,27 @@ export default function CommentSection({ movieId }: CommentSectionProps) {
     }
   };
 
-  const getUserDisplayName = (comment: Comment) => {
-    const userProfile = userProfiles[comment.user_id];
-    if (userProfile?.full_name) {
-      return userProfile.full_name;
-    }
-    return `User ${comment.user_id.slice(0, 8)}...`;
-  };
-
-  const getUserAvatar = (comment: Comment) => {
-    const userProfile = userProfiles[comment.user_id];
-    return userProfile?.avatar_url || "/placeholder.svg";
-  };
-
-  const getUserInitial = (comment: Comment) => {
-    const userProfile = userProfiles[comment.user_id];
-    if (userProfile?.full_name) {
-      return userProfile.full_name.charAt(0).toUpperCase();
-    }
-    return comment.user_id.charAt(0).toUpperCase();
-  };
+  const getUserDisplayName = (comment: Comment) =>
+    userProfiles[comment.user_id]?.full_name ||
+    `User ${comment.user_id.slice(0, 8)}...`;
+  const getUserAvatar = (comment: Comment) =>
+    userProfiles[comment.user_id]?.avatar_url || "/placeholder.svg";
+  const getUserInitial = (comment: Comment) =>
+    (userProfiles[comment.user_id]?.full_name || comment.user_id)
+      .charAt(0)
+      .toUpperCase();
 
   const renderComment = (comment: Comment, isReply: boolean = false) => (
     <div
       key={comment.id}
       className={`bg-gray-900/30 rounded-lg p-4 border border-gray-800 ${
-        isReply ? "ml-8 mt-2" : ""
+        isReply ? "ml-4 sm:ml-8 mt-2" : ""
       }`}
     >
       <div className="flex gap-4">
         <Avatar className={`${isReply ? "h-8 w-8" : "h-10 w-10"}`}>
           <AvatarImage
-            src={getUserAvatar(comment) || "/placeholder.svg"}
+            src={getUserAvatar(comment)}
             alt={getUserDisplayName(comment)}
           />
           <AvatarFallback className="bg-gray-700">
@@ -400,10 +406,7 @@ export default function CommentSection({ movieId }: CommentSectionProps) {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => {
-                    setEditingComment(null);
-                    setEditText("");
-                  }}
+                  onClick={() => setEditingComment(null)}
                   className="border-gray-700"
                 >
                   Cancel
@@ -414,9 +417,7 @@ export default function CommentSection({ movieId }: CommentSectionProps) {
                   disabled={loading}
                   className="bg-red-600 hover:bg-red-700"
                 >
-                  {loading ? (
-                    <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                  ) : null}
+                  {loading && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
                   Save
                 </Button>
               </div>
@@ -431,8 +432,7 @@ export default function CommentSection({ movieId }: CommentSectionProps) {
                 {comment.comment}
               </p>
 
-              {/* Reply button for main comments */}
-              {!isReply && user && (
+              {user && (
                 <div className="flex items-center gap-4 mt-3">
                   <Button
                     variant="ghost"
@@ -443,8 +443,6 @@ export default function CommentSection({ movieId }: CommentSectionProps) {
                     <Reply className="h-4 w-4 mr-1" />
                     Reply
                   </Button>
-
-                  {/* Show replies count and toggle button */}
                   {comment.reply_count! > 0 && (
                     <Button
                       variant="ghost"
@@ -464,7 +462,6 @@ export default function CommentSection({ movieId }: CommentSectionProps) {
                 </div>
               )}
 
-              {/* Reply form */}
               {replyingTo === comment.id && (
                 <div className="mt-4 flex gap-3">
                   <Avatar className="h-8 w-8">
@@ -478,7 +475,9 @@ export default function CommentSection({ movieId }: CommentSectionProps) {
                   </Avatar>
                   <div className="flex-1 space-y-2">
                     <Textarea
-                      placeholder="Write a reply..."
+                      placeholder={`Replying to ${getUserDisplayName(
+                        comment
+                      )}...`}
                       value={replyText}
                       onChange={(e) => setReplyText(e.target.value)}
                       className="bg-gray-800 border-gray-700 text-white text-sm min-h-[80px]"
@@ -487,10 +486,7 @@ export default function CommentSection({ movieId }: CommentSectionProps) {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => {
-                          setReplyingTo(null);
-                          setReplyText("");
-                        }}
+                        onClick={() => setReplyingTo(null)}
                         className="border-gray-700"
                       >
                         Cancel
@@ -512,6 +508,15 @@ export default function CommentSection({ movieId }: CommentSectionProps) {
                   </div>
                 </div>
               )}
+
+              {/* Recursive rendering of replies */}
+              {expandedComments.has(comment.id) &&
+                comment.replies &&
+                comment.replies.length > 0 && (
+                  <div className="space-y-2 mt-4">
+                    {comment.replies.map((reply) => renderComment(reply, true))}
+                  </div>
+                )}
             </>
           )}
         </div>
@@ -534,13 +539,13 @@ export default function CommentSection({ movieId }: CommentSectionProps) {
     );
   }
 
-  const totalComments = comments.reduce((total, comment) => {
-    return total + 1 + (comment.reply_count || 0);
-  }, 0);
+  const totalComments = comments.reduce(
+    (total, comment) => total + 1 + (comment.reply_count || 0),
+    0
+  );
 
   return (
     <div className="space-y-6">
-      {/* Header with stats */}
       <div className="flex items-center justify-between">
         <h3 className="text-xl font-semibold text-white">
           Comments ({totalComments})
@@ -561,15 +566,6 @@ export default function CommentSection({ movieId }: CommentSectionProps) {
         </Button>
       </div>
 
-      {/* Debug info */}
-      <div className="bg-gray-900/30 p-3 rounded-md text-xs text-gray-400">
-        <p>Movie ID: {movieIdString}</p>
-        <p>User Profiles Loaded: {Object.keys(userProfiles).length}</p>
-        <p>Main Comments: {comments.length}</p>
-        <p>Total Comments: {totalComments}</p>
-      </div>
-
-      {/* Comment form */}
       {user && (
         <div className="flex gap-4">
           <Avatar className="h-10 w-10">
@@ -606,7 +602,6 @@ export default function CommentSection({ movieId }: CommentSectionProps) {
         </div>
       )}
 
-      {/* Comments list */}
       <div className="space-y-4">
         {fetchLoading && comments.length === 0 ? (
           <div className="text-center py-8">
@@ -620,21 +615,7 @@ export default function CommentSection({ movieId }: CommentSectionProps) {
             </p>
           </div>
         ) : (
-          comments.map((comment) => (
-            <div key={comment.id}>
-              {/* Main comment */}
-              {renderComment(comment)}
-
-              {/* Replies */}
-              {expandedComments.has(comment.id) &&
-                comment.replies &&
-                comment.replies.length > 0 && (
-                  <div className="space-y-2">
-                    {comment.replies.map((reply) => renderComment(reply, true))}
-                  </div>
-                )}
-            </div>
-          ))
+          comments.map((comment) => renderComment(comment, false))
         )}
       </div>
     </div>
