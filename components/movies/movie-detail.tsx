@@ -24,7 +24,7 @@ import {
   Users,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import ReactPlayer from "react-player/lazy";
+import ReactPlayer from "react-player";
 import CommentSection from "@/components/comments/comment-section";
 
 interface MovieDetailProps {
