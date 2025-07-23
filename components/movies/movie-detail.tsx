@@ -24,7 +24,8 @@ import {
   Users,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import ReactPlayer from "react-player";
+import dynamic from "next/dynamic";
+const ReactPlayer = dynamic(() => import("react-player"), { ssr: false });
 import CommentSection from "@/components/comments/comment-section";
 
 interface MovieDetailProps {
@@ -370,11 +371,9 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
                   config={{
                     youtube: {
                       playerVars: {
-                        modestbranding: 1,
-                        rel: 0,
-                        fs: 1,
-                        showinfo: 0,
                         autoplay: 1,
+                        rel: 0,
+                        modestbranding: 1,
                       },
                     },
                   }}

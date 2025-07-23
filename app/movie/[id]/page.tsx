@@ -25,7 +25,6 @@ export default function MovieDetailPage() {
   const fetchMovieDetails = async () => {
     setLoading(true);
     try {
-      // First check if we have the movie in our database
       const { data: movieData } = await supabase
         .from("movies")
         .select("*")
@@ -34,8 +33,8 @@ export default function MovieDetailPage() {
 
       if (movieData) {
         setMovie(movieData);
+
         if (movieData.trailer_url) {
-          // Extract YouTube key from URL if stored
           const match = movieData.trailer_url.match(
             /(?:youtube\.com\/(?:[^/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?/\s]{11})/
           );
@@ -44,13 +43,13 @@ export default function MovieDetailPage() {
           }
         }
       } else {
-        // Fetch from TMDB API
         const movieDetails = await tmdbApi.getDetails("movie", Number(id));
         setMovie(movieDetails);
 
-        // Find trailer
+        // Cari trailer dari TMDB
+        let trailer;
         if (movieDetails.videos && movieDetails.videos.results) {
-          const trailer = movieDetails.videos.results.find(
+          trailer = movieDetails.videos.results.find(
             (video: any) => video.type === "Trailer" && video.site === "YouTube"
           );
           if (trailer) {
@@ -58,7 +57,7 @@ export default function MovieDetailPage() {
           }
         }
 
-        // Store in our database for caching
+        // Insert ke Supabase
         await supabase.from("movies").insert({
           tmdb_id: movieDetails.id,
           title: movieDetails.title,
@@ -67,8 +66,8 @@ export default function MovieDetailPage() {
           rating: movieDetails.vote_average,
           poster_url: movieDetails.poster_path,
           backdrop_url: movieDetails.backdrop_path,
-          trailer_url: trailerKey
-            ? `https://www.youtube.com/watch?v=${trailerKey}`
+          trailer_url: trailer
+            ? `https://www.youtube.com/watch?v=${trailer.key}`
             : null,
           overview: movieDetails.overview,
           release_date: movieDetails.release_date,
@@ -76,7 +75,6 @@ export default function MovieDetailPage() {
         });
       }
 
-      // Fetch similar movies
       const similar = await tmdbApi.getByGenre("movie", Number(id));
       setSimilarMovies(similar.results || []);
     } catch (error) {
@@ -112,11 +110,9 @@ export default function MovieDetailPage() {
     <div className="min-h-screen bg-black">
       <Navbar />
       <MovieDetail movie={movie} trailerKey={trailerKey} />
-
       <div className="max-w-7xl mx-auto px-4 py-8">
         <MovieCarousel title="Similar Movies" movies={similarMovies} />
       </div>
-
       <Footer />
     </div>
   );
