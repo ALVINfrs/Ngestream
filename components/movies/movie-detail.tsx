@@ -364,7 +364,8 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
                   width="100%"
                   height="100%"
                   controls
-                  playing={isPremium}
+                  playing={true} // Selalu coba putar
+                  muted={true} // Tapi mulai tanpa suara
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
