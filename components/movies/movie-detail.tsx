@@ -364,8 +364,20 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
                   width="100%"
                   height="100%"
                   controls
-                  playing={true} // Selalu coba putar
-                  muted={true} // Tapi mulai tanpa suara
+                  playing
+                  muted
+                  playsinline
+                  config={{
+                    youtube: {
+                      playerVars: {
+                        modestbranding: 1,
+                        rel: 0,
+                        fs: 1,
+                        showinfo: 0,
+                        autoplay: 1,
+                      },
+                    },
+                  }}
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
