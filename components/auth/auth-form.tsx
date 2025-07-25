@@ -16,25 +16,27 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
+// --- START PERUBAHAN: Import ikon mata ---
+import { Loader2, Eye, EyeOff } from "lucide-react";
+// --- AKHIR PERUBAHAN ---
 import FloatingPosterBackground from "./floating-poster-background";
 
 export default function AuthForm() {
   const { signIn, signUp, signInWithGoogle } = useAuth();
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  // --- START PERUBAHAN: State untuk visibilitas password ---
+  const [showPassword, setShowPassword] = useState(false);
+  // --- AKHIR PERUBAHAN ---
 
   const handleSignIn = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
-
     const formData = new FormData(e.currentTarget);
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
-
     try {
       const { error } = await signIn(email, password);
-
       if (error) {
         toast({
           title: "Sign in failed",
@@ -54,22 +56,18 @@ export default function AuthForm() {
         variant: "destructive",
       });
     }
-
     setLoading(false);
   };
 
   const handleSignUp = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
-
     const formData = new FormData(e.currentTarget);
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
     const fullName = formData.get("fullName") as string;
-
     try {
       const { error } = await signUp(email, password, fullName);
-
       if (error) {
         toast({
           title: "Sign up failed",
@@ -89,48 +87,38 @@ export default function AuthForm() {
         variant: "destructive",
       });
     }
-
     setLoading(false);
   };
 
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
     try {
-      console.log("Starting Google sign in...");
       const { error } = await signInWithGoogle();
-
       if (error) {
-        console.error("Google sign in error:", error);
         toast({
           title: "Google sign in failed",
           description: error.message,
           variant: "destructive",
         });
       } else {
-        console.log("Google sign in initiated successfully");
         toast({
           title: "Redirecting...",
-          description: "You will be redirected to Google for authentication.",
+          description: "You will be redirected for authentication.",
         });
       }
     } catch (error: any) {
-      console.error("Google sign in catch error:", error);
       toast({
         title: "Error",
         description: "Failed to sign in with Google",
         variant: "destructive",
       });
     }
-
     setGoogleLoading(false);
   };
 
   return (
     <div className="min-h-screen relative flex items-center justify-center p-4 overflow-hidden">
-      {/* Floating Poster Background */}
       <FloatingPosterBackground />
-
-      {/* Main Content */}
       <div className="relative z-10 w-full max-w-md">
         <div className="text-center mb-8 animate-fade-in-up">
           <h1 className="text-5xl font-bold text-red-600 mb-2 animate-glow">
@@ -183,19 +171,34 @@ export default function AuthForm() {
                       className="bg-gray-900/80 border-gray-700 text-white focus:border-red-500 transition-colors"
                     />
                   </div>
+                  {/* --- START PERUBAHAN: Input Password Sign In --- */}
                   <div className="space-y-2">
                     <Label htmlFor="signin-password" className="text-white">
                       Password
                     </Label>
-                    <Input
-                      id="signin-password"
-                      name="password"
-                      type="password"
-                      placeholder="Enter your password"
-                      required
-                      className="bg-gray-900/80 border-gray-700 text-white focus:border-red-500 transition-colors"
-                    />
+                    <div className="relative">
+                      <Input
+                        id="signin-password"
+                        name="password"
+                        type={showPassword ? "text" : "password"}
+                        placeholder="Enter your password"
+                        required
+                        className="bg-gray-900/80 border-gray-700 text-white focus:border-red-500 transition-colors pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-white"
+                      >
+                        {showPassword ? (
+                          <EyeOff className="h-5 w-5" />
+                        ) : (
+                          <Eye className="h-5 w-5" />
+                        )}
+                      </button>
+                    </div>
                   </div>
+                  {/* --- AKHIR PERUBAHAN --- */}
                 </CardContent>
                 <CardFooter className="flex flex-col space-y-4">
                   <Button
@@ -205,10 +208,9 @@ export default function AuthForm() {
                   >
                     {loading && (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    )}
+                    )}{" "}
                     Sign In
                   </Button>
-
                   <div className="relative w-full">
                     <div className="absolute inset-0 flex items-center">
                       <span className="w-full border-t border-gray-700" />
@@ -219,7 +221,6 @@ export default function AuthForm() {
                       </span>
                     </div>
                   </div>
-
                   <Button
                     type="button"
                     variant="outline"
@@ -248,7 +249,7 @@ export default function AuthForm() {
                           d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                         />
                       </svg>
-                    )}
+                    )}{" "}
                     Continue with Google
                   </Button>
                 </CardFooter>
@@ -288,19 +289,34 @@ export default function AuthForm() {
                       className="bg-gray-900/80 border-gray-700 text-white focus:border-red-500 transition-colors"
                     />
                   </div>
+                  {/* --- START PERUBAHAN: Input Password Sign Up --- */}
                   <div className="space-y-2">
                     <Label htmlFor="signup-password" className="text-white">
                       Password
                     </Label>
-                    <Input
-                      id="signup-password"
-                      name="password"
-                      type="password"
-                      placeholder="Create a password"
-                      required
-                      className="bg-gray-900/80 border-gray-700 text-white focus:border-red-500 transition-colors"
-                    />
+                    <div className="relative">
+                      <Input
+                        id="signup-password"
+                        name="password"
+                        type={showPassword ? "text" : "password"}
+                        placeholder="Create a password"
+                        required
+                        className="bg-gray-900/80 border-gray-700 text-white focus:border-red-500 transition-colors pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-white"
+                      >
+                        {showPassword ? (
+                          <EyeOff className="h-5 w-5" />
+                        ) : (
+                          <Eye className="h-5 w-5" />
+                        )}
+                      </button>
+                    </div>
                   </div>
+                  {/* --- AKHIR PERUBAHAN --- */}
                 </CardContent>
                 <CardFooter className="flex flex-col space-y-4">
                   <Button
@@ -310,10 +326,9 @@ export default function AuthForm() {
                   >
                     {loading && (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    )}
+                    )}{" "}
                     Sign Up
                   </Button>
-
                   <div className="relative w-full">
                     <div className="absolute inset-0 flex items-center">
                       <span className="w-full border-t border-gray-700" />
@@ -324,7 +339,6 @@ export default function AuthForm() {
                       </span>
                     </div>
                   </div>
-
                   <Button
                     type="button"
                     variant="outline"
@@ -353,7 +367,7 @@ export default function AuthForm() {
                           d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                         />
                       </svg>
-                    )}
+                    )}{" "}
                     Continue with Google
                   </Button>
                 </CardFooter>
