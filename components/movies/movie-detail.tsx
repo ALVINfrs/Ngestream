@@ -42,13 +42,15 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
   const [likesCount, setLikesCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [isVideoReady, setIsVideoReady] = useState(false);
+  const [errorLoading, setErrorLoading] = useState(false);
   const playerRef = useRef<any>(null);
 
   const [hasMounted, setHasMounted] = useState(false);
 
   useEffect(() => {
     setHasMounted(true);
-  }, []);
+    console.log("Trailer Key:", trailerKey); // Debugging
+  }, [trailerKey]);
 
   const title = movie.title || movie.name;
   const releaseDate = movie.release_date || movie.first_air_date;
@@ -176,11 +178,13 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
 
   const onPlayerReady = () => {
     setIsVideoReady(true);
+    setErrorLoading(false);
   };
 
   const onPlayerError = (e: any) => {
     console.error("Video player error:", e);
     setIsVideoReady(false);
+    setErrorLoading(true);
     toast({ title: "Failed to load trailer", variant: "destructive" });
   };
 
@@ -314,7 +318,7 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
               ) : trailerKey ? (
                 <ReactPlayer
                   ref={playerRef}
-                  url={`https://www.youtube.com/embed/${trailerKey}`}
+                  url={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1`}
                   width="100%"
                   height="100%"
                   controls={true}
@@ -329,10 +333,11 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
                   <p className="text-gray-400">No trailer available</p>
                 </div>
               )}
-              {!isVideoReady && hasMounted && trailerKey && (
+              {hasMounted && trailerKey && !isVideoReady && (
                 <div className="mt-4 p-4 bg-red-900/20 border border-red-800 rounded-lg text-center">
                   <p className="text-red-500">
-                    Loading trailer... (Check console for errors)
+                    Failed to load trailer. Check console for details or ensure
+                    the trailer key is valid.
                   </p>
                 </div>
               )}
