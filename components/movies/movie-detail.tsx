@@ -24,11 +24,10 @@ import {
   Users,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import ReactPlayer from "react-player";
+import dynamic from "next/dynamic";
+const ReactPlayer = dynamic(() => import("react-player"), { ssr: false });
 import CommentSection from "@/components/comments/comment-section";
-// --- START PERBAIKAN: Import Skeleton untuk loading ---
 import { Skeleton } from "@/components/ui/skeleton";
-// --- AKHIR PERBAIKAN ---
 
 interface MovieDetailProps {
   movie: any;
@@ -43,13 +42,11 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
   const [likesCount, setLikesCount] = useState(0);
   const [loading, setLoading] = useState(false);
 
-  // --- START PERBAIKAN: State untuk memastikan komponen hanya render di client ---
   const [hasMounted, setHasMounted] = useState(false);
 
   useEffect(() => {
     setHasMounted(true);
   }, []);
-  // --- AKHIR PERBAIKAN ---
 
   const title = movie.title || movie.name;
   const releaseDate = movie.release_date || movie.first_air_date;
@@ -300,7 +297,6 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
 
           <TabsContent value="trailer" className="mt-0">
             <div className="aspect-video w-full max-w-4xl mx-auto bg-gray-900 rounded-lg overflow-hidden">
-              {/* --- START PERBAIKAN: Tampilkan Player hanya setelah komponen siap di browser --- */}
               {!hasMounted ? (
                 <Skeleton className="w-full h-full" />
               ) : trailerKey ? (
@@ -318,7 +314,6 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
                   <p className="text-gray-400">No trailer available</p>
                 </div>
               )}
-              {/* --- AKHIR PERBAIKAN --- */}
             </div>
             {hasMounted && !isPremium && (
               <div className="mt-4 p-4 bg-yellow-900/20 border border-yellow-800 rounded-lg text-center">
