@@ -26,7 +26,9 @@ import {
 import { toast } from "@/hooks/use-toast";
 import ReactPlayer from "react-player";
 import CommentSection from "@/components/comments/comment-section";
+// --- START PERBAIKAN: Import Skeleton untuk loading ---
 import { Skeleton } from "@/components/ui/skeleton";
+// --- AKHIR PERBAIKAN ---
 
 interface MovieDetailProps {
   movie: any;
@@ -41,7 +43,7 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
   const [likesCount, setLikesCount] = useState(0);
   const [loading, setLoading] = useState(false);
 
-  // --- START PERBAIKAN: State untuk client-side rendering ---
+  // --- START PERBAIKAN: State untuk memastikan komponen hanya render di client ---
   const [hasMounted, setHasMounted] = useState(false);
 
   useEffect(() => {
@@ -63,7 +65,7 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
     : "Unknown";
 
   useEffect(() => {
-    if (user) {
+    if (user && movie.id) {
       checkUserInteractions();
       fetchLikesCount();
     }
@@ -87,7 +89,7 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
         .maybeSingle();
       setIsWishlisted(!!wishlistData);
     } catch (error) {
-      console.error("Error checking interactions:", error);
+      // console.error("Error checking interactions:", error);
     }
   };
 
@@ -117,12 +119,14 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
           .match({ user_id: user.id, movie_id: movie.id.toString() });
         setIsLiked(false);
         setLikesCount((p) => p - 1);
+        toast({ title: "Removed from liked movies" });
       } else {
         await supabase
           .from("likes")
           .insert({ user_id: user.id, movie_id: movie.id.toString() });
         setIsLiked(true);
         setLikesCount((p) => p + 1);
+        toast({ title: "Added to liked movies" });
       }
     } catch (error: any) {
       toast({
@@ -152,11 +156,13 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
           .delete()
           .match({ user_id: user.id, movie_id: movie.id.toString() });
         setIsWishlisted(false);
+        toast({ title: "Removed from wishlist" });
       } else {
         await supabase
           .from("wishlists")
           .insert({ user_id: user.id, movie_id: movie.id.toString() });
         setIsWishlisted(true);
+        toast({ title: "Added to wishlist" });
       }
     } catch (error: any) {
       toast({
@@ -171,6 +177,7 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
 
   return (
     <div className="bg-black text-white">
+      {/* Backdrop & Info Overlay */}
       <div className="relative h-[50vh] md:h-[70vh] w-full">
         <Image
           src={
@@ -267,6 +274,7 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
         </div>
       </div>
 
+      {/* Content Tabs */}
       <div className="max-w-7xl mx-auto px-4 py-8">
         <Tabs defaultValue="trailer" className="w-full">
           <TabsList className="bg-gray-900 border-b border-gray-800 w-full justify-start mb-6">
@@ -292,7 +300,7 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
 
           <TabsContent value="trailer" className="mt-0">
             <div className="aspect-video w-full max-w-4xl mx-auto bg-gray-900 rounded-lg overflow-hidden">
-              {/* --- START PERBAIKAN: Tampilkan Player hanya di client-side --- */}
+              {/* --- START PERBAIKAN: Tampilkan Player hanya setelah komponen siap di browser --- */}
               {!hasMounted ? (
                 <Skeleton className="w-full h-full" />
               ) : trailerKey ? (
@@ -312,7 +320,7 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
               )}
               {/* --- AKHIR PERBAIKAN --- */}
             </div>
-            {!isPremium && hasMounted && (
+            {hasMounted && !isPremium && (
               <div className="mt-4 p-4 bg-yellow-900/20 border border-yellow-800 rounded-lg text-center">
                 <p className="text-yellow-500 flex items-center justify-center">
                   <Lock className="h-4 w-4 mr-2" />
