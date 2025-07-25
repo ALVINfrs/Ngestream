@@ -24,8 +24,9 @@ import {
   Users,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import ReactPlayer from "react-player/lazy";
+import ReactPlayer from "react-player";
 import CommentSection from "@/components/comments/comment-section";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface MovieDetailProps {
   movie: any;
@@ -34,11 +35,19 @@ interface MovieDetailProps {
 
 export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
   const { user } = useAuth();
-  const { canLike, canWishlist, canComment, isPremium } = useSubscription();
+  const { canLike, canWishlist, isPremium } = useSubscription();
   const [isLiked, setIsLiked] = useState(false);
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
   const [loading, setLoading] = useState(false);
+
+  // --- START PERBAIKAN: State untuk client-side rendering ---
+  const [hasMounted, setHasMounted] = useState(false);
+
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
+  // --- AKHIR PERBAIKAN ---
 
   const title = movie.title || movie.name;
   const releaseDate = movie.release_date || movie.first_air_date;
@@ -58,93 +67,62 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
       checkUserInteractions();
       fetchLikesCount();
     }
-  }, [user]);
+  }, [user, movie.id]);
 
   const checkUserInteractions = async () => {
     if (!user) return;
-
     try {
-      // Check if user liked the movie
       const { data: likeData } = await supabase
         .from("likes")
-        .select("*")
+        .select("id")
         .eq("user_id", user.id)
         .eq("movie_id", movie.id.toString())
-        .single();
-
+        .maybeSingle();
       setIsLiked(!!likeData);
-
-      // Check if user wishlisted the movie
       const { data: wishlistData } = await supabase
         .from("wishlists")
-        .select("*")
+        .select("id")
         .eq("user_id", user.id)
         .eq("movie_id", movie.id.toString())
-        .single();
-
+        .maybeSingle();
       setIsWishlisted(!!wishlistData);
     } catch (error) {
-      console.error("Error checking user interactions:", error);
+      console.error("Error checking interactions:", error);
     }
   };
 
   const fetchLikesCount = async () => {
-    try {
-      const { count } = await supabase
-        .from("likes")
-        .select("*", { count: "exact" })
-        .eq("movie_id", movie.id.toString());
-      setLikesCount(count || 0);
-    } catch (error) {
-      console.error("Error fetching likes count:", error);
-    }
+    const { count } = await supabase
+      .from("likes")
+      .select("*", { count: "exact", head: true })
+      .eq("movie_id", movie.id.toString());
+    setLikesCount(count || 0);
   };
 
   const handleLike = async () => {
     if (!user) {
-      toast({
-        title: "Authentication required",
-        description: "Please sign in to like movies",
-        variant: "destructive",
-      });
+      toast({ title: "Authentication required", variant: "destructive" });
       return;
     }
-
     if (!canLike) {
-      toast({
-        title: "Upgrade required",
-        description: "Upgrade to Basic or Premium to like movies",
-        variant: "destructive",
-      });
+      toast({ title: "Upgrade required", variant: "destructive" });
       return;
     }
-
     setLoading(true);
-
     try {
       if (isLiked) {
-        // Remove like
-        const { error } = await supabase
+        await supabase
           .from("likes")
           .delete()
-          .eq("user_id", user.id)
-          .eq("movie_id", movie.id.toString());
-
-        if (error) throw error;
+          .match({ user_id: user.id, movie_id: movie.id.toString() });
         setIsLiked(false);
-        setLikesCount((prev) => prev - 1);
-        toast({ title: "Removed from liked movies" });
+        setLikesCount((p) => p - 1);
       } else {
-        // Add like
-        const { error } = await supabase.from("likes").insert({
-          user_id: user.id,
-          movie_id: movie.id.toString(),
-        });
-
-        if (error) throw error;
+        await supabase
+          .from("likes")
+          .insert({ user_id: user.id, movie_id: movie.id.toString() });
         setIsLiked(true);
-        setLikesCount((prev) => prev + 1);
-        toast({ title: "Added to liked movies" });
+        setLikesCount((p) => p + 1);
       }
     } catch (error: any) {
       toast({
@@ -152,54 +130,33 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
         description: error.message,
         variant: "destructive",
       });
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   const handleWishlist = async () => {
     if (!user) {
-      toast({
-        title: "Authentication required",
-        description: "Please sign in to add to wishlist",
-        variant: "destructive",
-      });
+      toast({ title: "Authentication required", variant: "destructive" });
       return;
     }
-
     if (!canWishlist) {
-      toast({
-        title: "Upgrade required",
-        description: "Upgrade to Basic or Premium to use wishlist",
-        variant: "destructive",
-      });
+      toast({ title: "Upgrade required", variant: "destructive" });
       return;
     }
-
     setLoading(true);
-
     try {
       if (isWishlisted) {
-        // Remove from wishlist
-        const { error } = await supabase
+        await supabase
           .from("wishlists")
           .delete()
-          .eq("user_id", user.id)
-          .eq("movie_id", movie.id.toString());
-
-        if (error) throw error;
+          .match({ user_id: user.id, movie_id: movie.id.toString() });
         setIsWishlisted(false);
-        toast({ title: "Removed from wishlist" });
       } else {
-        // Add to wishlist
-        const { error } = await supabase.from("wishlists").insert({
-          user_id: user.id,
-          movie_id: movie.id.toString(),
-        });
-
-        if (error) throw error;
+        await supabase
+          .from("wishlists")
+          .insert({ user_id: user.id, movie_id: movie.id.toString() });
         setIsWishlisted(true);
-        toast({ title: "Added to wishlist" });
       }
     } catch (error: any) {
       toast({
@@ -207,14 +164,13 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
         description: error.message,
         variant: "destructive",
       });
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   return (
     <div className="bg-black text-white">
-      {/* Backdrop Image */}
       <div className="relative h-[50vh] md:h-[70vh] w-full">
         <Image
           src={
@@ -227,11 +183,8 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
           priority
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-transparent" />
-
-        {/* Movie Info Overlay */}
         <div className="absolute bottom-0 left-0 w-full p-6 md:p-12">
           <div className="flex flex-col md:flex-row gap-8 items-start">
-            {/* Poster */}
             <div className="hidden md:block w-48 h-72 relative rounded-lg overflow-hidden shadow-2xl">
               <Image
                 src={getImageUrl(movie.poster_path) || "/placeholder.svg"}
@@ -240,11 +193,8 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
                 className="object-cover"
               />
             </div>
-
-            {/* Details */}
             <div className="flex-1">
               <h1 className="text-3xl md:text-5xl font-bold mb-2">{title}</h1>
-
               <div className="flex flex-wrap items-center gap-3 mb-4">
                 <div className="flex items-center">
                   <Star className="h-4 w-4 text-yellow-400 fill-current mr-1" />
@@ -265,21 +215,20 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
                   {contentRating}
                 </Badge>
               </div>
-
               <div className="flex flex-wrap gap-2 mb-4">
-                {movie.genres?.map((genre: any) => (
+                {movie.genres?.map((g: any) => (
                   <Badge
-                    key={genre.id}
+                    key={g.id}
                     variant="outline"
                     className="border-gray-600"
                   >
-                    {genre.name}
+                    {g.name}
                   </Badge>
                 ))}
               </div>
-
-              <p className="text-gray-300 mb-6 max-w-2xl">{movie.overview}</p>
-
+              <p className="text-gray-300 mb-6 max-w-2xl line-clamp-3">
+                {movie.overview}
+              </p>
               <div className="flex flex-wrap gap-4">
                 <Button
                   onClick={handleLike}
@@ -288,7 +237,7 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
                     isLiked
                       ? "bg-red-600 hover:bg-red-700"
                       : "bg-gray-800 hover:bg-gray-700"
-                  } flex items-center gap-2 transform hover:scale-105 transition-all`}
+                  } flex items-center gap-2`}
                 >
                   <Heart
                     className={`h-4 w-4 ${isLiked ? "fill-current" : ""}`}
@@ -298,7 +247,6 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
                     {likesCount > 0 && `(${likesCount})`}
                   </span>
                 </Button>
-
                 <Button
                   onClick={handleWishlist}
                   disabled={loading || !canWishlist}
@@ -306,33 +254,19 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
                     isWishlisted
                       ? "bg-blue-600 hover:bg-blue-700"
                       : "bg-gray-800 hover:bg-gray-700"
-                  } flex items-center gap-2 transform hover:scale-105 transition-all`}
+                  } flex items-center gap-2`}
                 >
                   <Bookmark
                     className={`h-4 w-4 ${isWishlisted ? "fill-current" : ""}`}
                   />
                   <span>{isWishlisted ? "Wishlisted" : "Add to Wishlist"}</span>
                 </Button>
-
-                {!canLike && (
-                  <Button
-                    variant="outline"
-                    className="border-yellow-600 text-yellow-500 hover:bg-yellow-900/20 transform hover:scale-105 transition-all"
-                    onClick={() => {
-                      /* Navigate to subscription page */
-                    }}
-                  >
-                    <Lock className="h-4 w-4 mr-2" />
-                    Upgrade to Interact
-                  </Button>
-                )}
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Content Tabs */}
       <div className="max-w-7xl mx-auto px-4 py-8">
         <Tabs defaultValue="trailer" className="w-full">
           <TabsList className="bg-gray-900 border-b border-gray-800 w-full justify-start mb-6">
@@ -358,34 +292,27 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
 
           <TabsContent value="trailer" className="mt-0">
             <div className="aspect-video w-full max-w-4xl mx-auto bg-gray-900 rounded-lg overflow-hidden">
-              {trailerKey ? (
+              {/* --- START PERBAIKAN: Tampilkan Player hanya di client-side --- */}
+              {!hasMounted ? (
+                <Skeleton className="w-full h-full" />
+              ) : trailerKey ? (
                 <ReactPlayer
                   url={`https://www.youtube.com/watch?v=${trailerKey}`}
                   width="100%"
                   height="100%"
-                  controls
-                  playing
-                  muted
-                  playsinline
-                  config={{
-                    youtube: {
-                      playerVars: {
-                        modestbranding: 1,
-                        rel: 0,
-                        fs: 1,
-                        showinfo: 0,
-                        autoplay: 1,
-                      },
-                    },
-                  }}
+                  controls={true}
+                  playing={true}
+                  muted={true}
+                  playsinline={true}
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
                   <p className="text-gray-400">No trailer available</p>
                 </div>
               )}
+              {/* --- AKHIR PERBAIKAN --- */}
             </div>
-            {!isPremium && (
+            {!isPremium && hasMounted && (
               <div className="mt-4 p-4 bg-yellow-900/20 border border-yellow-800 rounded-lg text-center">
                 <p className="text-yellow-500 flex items-center justify-center">
                   <Lock className="h-4 w-4 mr-2" />
