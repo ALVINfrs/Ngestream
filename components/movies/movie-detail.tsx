@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -41,6 +41,8 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [isVideoReady, setIsVideoReady] = useState(false);
+  const playerRef = useRef<any>(null);
 
   const [hasMounted, setHasMounted] = useState(false);
 
@@ -172,6 +174,16 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
     }
   };
 
+  const onPlayerReady = () => {
+    setIsVideoReady(true);
+  };
+
+  const onPlayerError = (e: any) => {
+    console.error("Video player error:", e);
+    setIsVideoReady(false);
+    toast({ title: "Failed to load trailer", variant: "destructive" });
+  };
+
   return (
     <div className="bg-black text-white">
       {/* Backdrop & Info Overlay */}
@@ -301,17 +313,27 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
                 <Skeleton className="w-full h-full" />
               ) : trailerKey ? (
                 <ReactPlayer
-                  url={`https://www.youtube.com/watch?v=${trailerKey}`}
+                  ref={playerRef}
+                  url={`https://www.youtube.com/embed/${trailerKey}`}
                   width="100%"
                   height="100%"
                   controls={true}
                   playing={true}
                   muted={true}
                   playsinline={true}
+                  onReady={onPlayerReady}
+                  onError={onPlayerError}
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
                   <p className="text-gray-400">No trailer available</p>
+                </div>
+              )}
+              {!isVideoReady && hasMounted && trailerKey && (
+                <div className="mt-4 p-4 bg-red-900/20 border border-red-800 rounded-lg text-center">
+                  <p className="text-red-500">
+                    Loading trailer... (Check console for errors)
+                  </p>
                 </div>
               )}
             </div>
