@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,10 +24,11 @@ import {
   Users,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import dynamic from "next/dynamic";
-const ReactPlayer = dynamic(() => import("react-player"), { ssr: false });
+import ReactPlayer from "react-player";
 import CommentSection from "@/components/comments/comment-section";
+// --- START PERBAIKAN: Import Skeleton untuk loading ---
 import { Skeleton } from "@/components/ui/skeleton";
+// --- AKHIR PERBAIKAN ---
 
 interface MovieDetailProps {
   movie: any;
@@ -41,16 +42,14 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [isVideoReady, setIsVideoReady] = useState(false);
-  const [errorLoading, setErrorLoading] = useState(false);
-  const playerRef = useRef<any>(null);
 
+  // --- START PERBAIKAN: State untuk memastikan komponen hanya render di client ---
   const [hasMounted, setHasMounted] = useState(false);
 
   useEffect(() => {
     setHasMounted(true);
-    console.log("Trailer Key:", trailerKey); // Debugging
-  }, [trailerKey]);
+  }, []);
+  // --- AKHIR PERBAIKAN ---
 
   const title = movie.title || movie.name;
   const releaseDate = movie.release_date || movie.first_air_date;
@@ -174,18 +173,6 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
     } finally {
       setLoading(false);
     }
-  };
-
-  const onPlayerReady = () => {
-    setIsVideoReady(true);
-    setErrorLoading(false);
-  };
-
-  const onPlayerError = (e: any) => {
-    console.error("Video player error:", e);
-    setIsVideoReady(false);
-    setErrorLoading(true);
-    toast({ title: "Failed to load trailer", variant: "destructive" });
   };
 
   return (
@@ -313,34 +300,25 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
 
           <TabsContent value="trailer" className="mt-0">
             <div className="aspect-video w-full max-w-4xl mx-auto bg-gray-900 rounded-lg overflow-hidden">
+              {/* --- START PERBAIKAN: Tampilkan Player hanya setelah komponen siap di browser --- */}
               {!hasMounted ? (
                 <Skeleton className="w-full h-full" />
               ) : trailerKey ? (
                 <ReactPlayer
-                  ref={playerRef}
-                  url={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1`}
+                  url={`https://www.youtube.com/watch?v=${trailerKey}`}
                   width="100%"
                   height="100%"
                   controls={true}
                   playing={true}
                   muted={true}
                   playsinline={true}
-                  onReady={onPlayerReady}
-                  onError={onPlayerError}
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
                   <p className="text-gray-400">No trailer available</p>
                 </div>
               )}
-              {hasMounted && trailerKey && !isVideoReady && (
-                <div className="mt-4 p-4 bg-red-900/20 border border-red-800 rounded-lg text-center">
-                  <p className="text-red-500">
-                    Failed to load trailer. Check console for details or ensure
-                    the trailer key is valid.
-                  </p>
-                </div>
-              )}
+              {/* --- AKHIR PERBAIKAN --- */}
             </div>
             {hasMounted && !isPremium && (
               <div className="mt-4 p-4 bg-yellow-900/20 border border-yellow-800 rounded-lg text-center">
