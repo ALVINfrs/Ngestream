@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
+import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -24,11 +25,14 @@ import {
   Users,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import ReactPlayer from "react-player";
 import CommentSection from "@/components/comments/comment-section";
-// --- START PERBAIKAN: Import Skeleton untuk loading ---
 import { Skeleton } from "@/components/ui/skeleton";
-// --- AKHIR PERBAIKAN ---
+
+// Gunakan Dynamic Import untuk memastikan komponen hanya dimuat di browser
+const ReactPlayer = dynamic(() => import("react-player"), {
+  ssr: false,
+  loading: () => <Skeleton className="w-full h-full" />,
+});
 
 interface MovieDetailProps {
   movie: any;
@@ -42,14 +46,6 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
   const [loading, setLoading] = useState(false);
-
-  // --- START PERBAIKAN: State untuk memastikan komponen hanya render di client ---
-  const [hasMounted, setHasMounted] = useState(false);
-
-  useEffect(() => {
-    setHasMounted(true);
-  }, []);
-  // --- AKHIR PERBAIKAN ---
 
   const title = movie.title || movie.name;
   const releaseDate = movie.release_date || movie.first_air_date;
@@ -177,7 +173,6 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
 
   return (
     <div className="bg-black text-white">
-      {/* Backdrop & Info Overlay */}
       <div className="relative h-[50vh] md:h-[70vh] w-full">
         <Image
           src={
@@ -274,7 +269,6 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
         </div>
       </div>
 
-      {/* Content Tabs */}
       <div className="max-w-7xl mx-auto px-4 py-8">
         <Tabs defaultValue="trailer" className="w-full">
           <TabsList className="bg-gray-900 border-b border-gray-800 w-full justify-start mb-6">
@@ -297,30 +291,27 @@ export default function MovieDetail({ movie, trailerKey }: MovieDetailProps) {
               Comments
             </TabsTrigger>
           </TabsList>
-
           <TabsContent value="trailer" className="mt-0">
             <div className="aspect-video w-full max-w-4xl mx-auto bg-gray-900 rounded-lg overflow-hidden">
-              {/* --- START PERBAIKAN: Tampilkan Player hanya setelah komponen siap di browser --- */}
-              {!hasMounted ? (
-                <Skeleton className="w-full h-full" />
-              ) : trailerKey ? (
+              {trailerKey ? (
+                // --- START PERBAIKAN: Menggunakan prop yang benar sesuai V3 ---
                 <ReactPlayer
-                  url={`https://www.youtube.com/watch?v=${trailerKey}`}
+                  src={`https://www.youtube.com/watch?v=${trailerKey}`} // Ganti `url` menjadi `src`
                   width="100%"
                   height="100%"
                   controls={true}
                   playing={true}
                   muted={true}
-                  playsinline={true}
+                  playsInline={true} // Ganti `playsinline` menjadi `playsInline`
                 />
               ) : (
+                // --- AKHIR PERBAIKAN ---
                 <div className="w-full h-full flex items-center justify-center">
                   <p className="text-gray-400">No trailer available</p>
                 </div>
               )}
-              {/* --- AKHIR PERBAIKAN --- */}
             </div>
-            {hasMounted && !isPremium && (
+            {!isPremium && (
               <div className="mt-4 p-4 bg-yellow-900/20 border border-yellow-800 rounded-lg text-center">
                 <p className="text-yellow-500 flex items-center justify-center">
                   <Lock className="h-4 w-4 mr-2" />
